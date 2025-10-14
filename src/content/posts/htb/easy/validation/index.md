@@ -23,42 +23,59 @@ category: HackTheBox
 
 ## Reconocimiento
 
-Comenzaremos el reconocimiento de la máquina haciendo un escaneo a los puertos abiertos.
+### Nmap
 
-```
-nmap -p- --open --min-rate 5000 -sS -n -Pn -vvv 10.10.11.116
-```
+Iniciaremos el escaneo de **Nmap** con la siguiente línea de comandos:
 
-```
-PORT     STATE SERVICE    REASON
-22/tcp   open  ssh        syn-ack ttl 63
-80/tcp   open  http       syn-ack ttl 62
-4566/tcp open  kwtc       syn-ack ttl 63
-8080/tcp open  http-proxy syn-ack ttl 63
+```bash wrap=false
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn 10.10.11.116 -oG nmap/allPorts 
 ```
 
-Vemos 4 puertos abiertos, por lo cual haremos un escaneo más profundo sobre ellos.
+| Parámetro           | Descripción                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `-p-`               | Escanea **todos los puertos** (1-65535).                                                     |
+| `--open`            | Muestra **solo puertos abiertos**.                                                           |
+| `-sS`               | Escaneo **SYN** (rápido y sigiloso).                                                         |
+| `--min-rate 5000`   | Envía al menos **5000 paquetes por segundo** para acelerar el escaneo.                       |
+| `-vvv`              | Máxima **verbosidad**, muestra más detalles en tiempo real.                                  |
+| `-n`                | Evita resolución DNS.                                                                        |
+| `-Pn`               | Asume que el host está activo, **sin hacer ping** previo.                                    |
+| `10.10.11.116`       | Dirección IP objetivo.                                                                       |
+| `-oG nmap/allPorts` | Guarda la salida en formato **grepable** para procesar con herramientas como `grep` o `awk`. |
+
+```txt wrap=false
 
 ```
-PORT     STATE SERVICE REASON         VERSION
-22/tcp   open  ssh     syn-ack ttl 63 OpenSSH 8.2p1 Ubuntu 4ubuntu0.3 (Ubuntu Linux; protocol 2.0)
-| ssh-hostkey: 
-|   3072 d8:f5:ef:d2:d3:f9:8d:ad:c6:cf:24:85:94:26:ef:7a (RSA)
-| ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCgSpafkjRVogAlgtxt6cFN7sU4sRTiGYC01QloBpbOwerqFUoYNyhCdNP/9rvdhwFpXomoMhDxioWQZb1RTSbR5aCwkzwDRnLz5PKN/7faaoEVjFM1vSnjGwWxzPZJw4Xy8wEbvMDlNZQbWu44UMWhLH+Vp63egRsut0SkTpUy3Ovp/yb3uAeT/4sUPG+LvDgzXD2QY+O1SV0Y3pE+pRmL3UfRKr2ltMfpcc7y7423+3oRSONHfy1upVUcUZkRIKrl9Qb4CDpxbVi/hYfAFQcOYH+IawAounkeiTMMEtOYbzDysEzVrFcCiGPWOX5+7tu4H7jYnZiel39ka/TFODVA+m2ZJiz2NoKLKTVhouVAGkH7adYtotM62JEtow8MW0HCZ9+cX6ki5cFK9WQhN++KZej2fEZDkxV7913KaIa4HCbiDq1Sfr5j7tFAWnNDo097UHXgN5A0mL1zNqwfTBCHQTEga/ztpDE0pmTKS4rkBne9EDn6GpVhSuabX9S/BLk=
-|   256 46:3d:6b:cb:a8:19:eb:6a:d0:68:86:94:86:73:e1:72 (ECDSA)
-| ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBJ9LolyD5tnJ06EqjRR6bFX/7oOoTeFPw2TKsP1KCHJcsPSVfZIafOYEsWkaq67dsCvOdIZ8VQiNAKfnGiaBLOo=
-|   256 70:32:d7:e3:77:c1:4a:cf:47:2a:de:e5:08:7a:f8:7a (ED25519)
-|_ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJOP8cvEQVqCwuWYT06t/DEGxy6sNajp7CzuvfJzrCRZ
-80/tcp   open  http    syn-ack ttl 62 Apache httpd 2.4.48 ((Debian))
-|_http-title: Site doesn't have a title (text/html; charset=UTF-8).
-|_http-server-header: Apache/2.4.48 (Debian)
-| http-methods: 
-|_  Supported Methods: GET HEAD POST OPTIONS
-4566/tcp open  http    syn-ack ttl 63 nginx
-|_http-title: 403 Forbidden
-8080/tcp open  http    syn-ack ttl 63 nginx
-|_http-title: 502 Bad Gateway
-Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+Ahora con la función **extractPorts**, extraeremos los puertos abiertos y nos los copiaremos al clipboard para hacer un escaneo más profundo:
+
+```bash title="Función de S4vitar"
+extractPorts () {
+	ports="$(cat $1 | grep -oP '\d{1,5}/open' | awk '{print $1}' FS='/' | xargs | tr ' ' ',')" 
+	ip_address="$(cat $1 | grep -oP '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' | sort -u | head -n 1)" 
+	echo -e "\n[*] Extracting information...\n" > extractPorts.tmp
+	echo -e "\t[*] IP Address: $ip_address" >> extractPorts.tmp
+	echo -e "\t[*] Open ports: $ports\n" >> extractPorts.tmp
+	echo $ports | tr -d '\n' | xclip -sel clip
+	echo -e "[*] Ports copied to clipboard\n" >> extractPorts.tmp
+	/bin/batcat --paging=never extractPorts.tmp
+	rm extractPorts.tmp
+}
+```
+
+```bash wrap=false
+nmap -sVC -p53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,49664,49667,49676,49688,49693,49715 10.10.11.174 -oN nmap/targeted
+```
+
+| Parámetro           | Descripción                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `-sV`               | Detecta la **versión** de los servicios que están corriendo en los puertos abiertos. |
+| `-C`                | Ejecuta **scripts NSE de detección de versiones y configuración**.                   |
+| `-p`                | Escanea únicamente los puertos seleccionados.                                        |
+| `10.10.11.174`       | Dirección IP objetivo.                                                               |
+| `-oN nmap/targeted` | Guarda la salida en **formato normal** en el archivo indicado.                       |
+
+```txt wrap=false
 
 ```
 
@@ -68,7 +85,7 @@ Al ver que tenemos un puerto **http** abierto vamos a hacer un reconocimiento de
 http://10.10.11.116 [200 OK] Apache[2.4.48], Bootstrap, Country[RESERVED][ZZ], HTTPServer[Debian Linux][Apache/2.4.48 (Debian)], IP[10.10.11.116], JQuery, PHP[7.4.23], Script, X-Powered-By[PHP/7.4.23]
 ```
 
-Vemos que usa **PHP** principalmente junto con **Apache**. Nada más entrar a la web podemos ver un pequeño formulario de registro con 2 campos.
+Vemos que usa `PHP` principalmente junto con **Apache**. Nada más entrar a la web podemos ver un pequeño formulario de registro con 2 campos.
 
 ![Formulario](./1.png)
 
