@@ -1,0 +1,170 @@
+---
+title: Shoppy | Linux
+published: 2025-10-19
+image: "./logo.png"
+tags: [Easy, Linux, ]
+category: HackTheBox
+---
+
+## Información Básica
+
+### Técnicas vistas
+
+- Virtual Hosting
+- Subdomain Enumeration
+- NoSQL Injection (Admin Auth Bypass)
+- Abusing the Shoppy App search engine (NoSQL Injection) - Obtaining the password of DB users
+- Cracking Hashes Online
+- Log into Mattermost + Information Leakage
+- Abusing Sudoers Privilege
+- Binary Analysis - GHIDRA (Reverse Engineering)
+- Abusing docker group [Privilege Escalation]
+
+### Preparación
+
+- eWPT
+- OSWE
+- OSCP
+
+***
+
+## Reconocimiento
+
+### Nmap
+
+Iniciaremos el escaneo de **Nmap** con la siguiente línea de comandos:
+
+```bash wrap=false
+nmap -p- --open -sS --min-rate 5000 -vvv -n -Pn 10.10.11.180 -oG nmap/allPorts 
+```
+
+| Parámetro           | Descripción                                                                                  |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `-p-`               | Escanea **todos los puertos** (1-65535).                                                     |
+| `--open`            | Muestra **solo puertos abiertos**.                                                           |
+| `-sS`               | Escaneo **SYN** (rápido y sigiloso).                                                         |
+| `--min-rate 5000`   | Envía al menos **5000 paquetes por segundo** para acelerar el escaneo.                       |
+| `-vvv`              | Máxima **verbosidad**, muestra más detalles en tiempo real.                                  |
+| `-n`                | Evita resolución DNS.                                                                        |
+| `-Pn`               | Asume que el host está activo, **sin hacer ping** previo.                                    |
+| `10.10.11.180`       | Dirección IP objetivo.                                                                       |
+| `-oG nmap/allPorts` | Guarda la salida en formato **grepable** para procesar con herramientas como `grep` o `awk`. |
+
+```txt wrap=false
+PORT     STATE SERVICE REASON
+22/tcp   open  ssh     syn-ack ttl 63
+80/tcp   open  http    syn-ack ttl 63
+9093/tcp open  copycat syn-ack ttl 63
+```
+
+Ahora con la función **extractPorts**, extraeremos los puertos abiertos y nos los copiaremos al clipboard para hacer un escaneo más profundo:
+
+```bash title="Función de S4vitar"
+extractPorts () {
+	ports="$(cat $1 | grep -oP '\d{1,5}/open' | awk '{print $1}' FS='/' | xargs | tr ' ' ',')" 
+	ip_address="$(cat $1 | grep -oP '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}' | sort -u | head -n 1)" 
+	echo -e "\n[*] Extracting information...\n" > extractPorts.tmp
+	echo -e "\t[*] IP Address: $ip_address" >> extractPorts.tmp
+	echo -e "\t[*] Open ports: $ports\n" >> extractPorts.tmp
+	echo $ports | tr -d '\n' | xclip -sel clip
+	echo -e "[*] Ports copied to clipboard\n" >> extractPorts.tmp
+	/bin/batcat --paging=never extractPorts.tmp
+	rm extractPorts.tmp
+}
+```
+
+```bash wrap=false
+nmap -sVC -p22,80,9093 10.10.11.180 -oN nmap/targeted
+```
+
+| Parámetro           | Descripción                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `-sV`               | Detecta la **versión** de los servicios que están corriendo en los puertos abiertos. |
+| `-C`                | Ejecuta **scripts NSE de detección de versiones y configuración**.                   |
+| `-p`                | Escanea únicamente los puertos seleccionados.                                        |
+| `10.10.11.180`       | Dirección IP objetivo.                                                               |
+| `-oN nmap/targeted` | Guarda la salida en **formato normal** en el archivo indicado.                       |
+
+```txt wrap=false
+PORT     STATE SERVICE VERSION
+22/tcp   open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+| ssh-hostkey: 
+|   3072 9e:5e:83:51:d9:9f:89:ea:47:1a:12:eb:81:f9:22:c0 (RSA)
+|   256 58:57:ee:eb:06:50:03:7c:84:63:d7:a3:41:5b:1a:d5 (ECDSA)
+|_  256 3e:9d:0a:42:90:44:38:60:b3:b6:2c:e9:bd:9a:67:54 (ED25519)
+80/tcp   open  http    nginx 1.23.1
+|_http-title:             Shoppy Wait Page        
+|_http-server-header: nginx/1.23.1
+9093/tcp open  http    Golang net/http server
+|_http-trane-info: Problem with XML parsing of /evox/about
+|_http-title: Site doesn't have a title (text/plain; version=0.0.4; charset=utf-8).
+| fingerprint-strings: 
+|   GenericLines: 
+|     HTTP/1.1 400 Bad Request
+|     Content-Type: text/plain; charset=utf-8
+|     Connection: close
+|     Request
+|   GetRequest, HTTPOptions: 
+|     HTTP/1.0 200 OK
+|     Content-Type: text/plain; version=0.0.4; charset=utf-8
+|     Date: Sun, 19 Oct 2025 13:01:10 GMT
+|     HELP go_gc_cycles_automatic_gc_cycles_total Count of completed GC cycles generated by the Go runtime.
+|     TYPE go_gc_cycles_automatic_gc_cycles_total counter
+|     go_gc_cycles_automatic_gc_cycles_total 5
+|     HELP go_gc_cycles_forced_gc_cycles_total Count of completed GC cycles forced by the application.
+|     TYPE go_gc_cycles_forced_gc_cycles_total counter
+|     go_gc_cycles_forced_gc_cycles_total 0
+|     HELP go_gc_cycles_total_gc_cycles_total Count of all completed GC cycles.
+|     TYPE go_gc_cycles_total_gc_cycles_total counter
+|     go_gc_cycles_total_gc_cycles_total 5
+|     HELP go_gc_duration_seconds A summary of the pause duration of garbage collection cycles.
+|     TYPE go_gc_duration_seconds summary
+|     go_gc_duration_seconds{quantile="0"} 2.9496e-05
+|     go_gc_duration_seconds{quantile="0.25"} 5.4552e-05
+|_    go_gc_dur
+1 service unrecognized despite returning data. If you know the service/version, please submit the following fingerprint at https://nmap.org/cgi-bin/submit.cgi?new-service :
+SF-Port9093-TCP:V=7.95%I=7%D=10/19%Time=68F4E0FC%P=x86_64-pc-linux-gnu%r(G
+SF:enericLines,67,"HTTP/1\.1\x20400\x20Bad\x20Request\r\nContent-Type:\x20
+SF:text/plain;\x20charset=utf-8\r\nConnection:\x20close\r\n\r\n400\x20Bad\
+SF:x20Request")%r(GetRequest,2FA4,"HTTP/1\.0\x20200\x20OK\r\nContent-Type:
+SF:\x20text/plain;\x20version=0\.0\.4;\x20charset=utf-8\r\nDate:\x20Sun,\x
+SF:2019\x20Oct\x202025\x2013:01:10\x20GMT\r\n\r\n#\x20HELP\x20go_gc_cycles
+SF:_automatic_gc_cycles_total\x20Count\x20of\x20completed\x20GC\x20cycles\
+SF:x20generated\x20by\x20the\x20Go\x20runtime\.\n#\x20TYPE\x20go_gc_cycles
+SF:_automatic_gc_cycles_total\x20counter\ngo_gc_cycles_automatic_gc_cycles
+SF:_total\x205\n#\x20HELP\x20go_gc_cycles_forced_gc_cycles_total\x20Count\
+SF:x20of\x20completed\x20GC\x20cycles\x20forced\x20by\x20the\x20applicatio
+SF:n\.\n#\x20TYPE\x20go_gc_cycles_forced_gc_cycles_total\x20counter\ngo_gc
+SF:_cycles_forced_gc_cycles_total\x200\n#\x20HELP\x20go_gc_cycles_total_gc
+SF:_cycles_total\x20Count\x20of\x20all\x20completed\x20GC\x20cycles\.\n#\x
+SF:20TYPE\x20go_gc_cycles_total_gc_cycles_total\x20counter\ngo_gc_cycles_t
+SF:otal_gc_cycles_total\x205\n#\x20HELP\x20go_gc_duration_seconds\x20A\x20
+SF:summary\x20of\x20the\x20pause\x20duration\x20of\x20garbage\x20collectio
+SF:n\x20cycles\.\n#\x20TYPE\x20go_gc_duration_seconds\x20summary\ngo_gc_du
+SF:ration_seconds{quantile=\"0\"}\x202\.9496e-05\ngo_gc_duration_seconds{q
+SF:uantile=\"0\.25\"}\x205\.4552e-05\ngo_gc_dur")%r(HTTPOptions,2FA4,"HTTP
+SF:/1\.0\x20200\x20OK\r\nContent-Type:\x20text/plain;\x20version=0\.0\.4;\
+SF:x20charset=utf-8\r\nDate:\x20Sun,\x2019\x20Oct\x202025\x2013:01:10\x20G
+SF:MT\r\n\r\n#\x20HELP\x20go_gc_cycles_automatic_gc_cycles_total\x20Count\
+SF:x20of\x20completed\x20GC\x20cycles\x20generated\x20by\x20the\x20Go\x20r
+SF:untime\.\n#\x20TYPE\x20go_gc_cycles_automatic_gc_cycles_total\x20counte
+SF:r\ngo_gc_cycles_automatic_gc_cycles_total\x205\n#\x20HELP\x20go_gc_cycl
+SF:es_forced_gc_cycles_total\x20Count\x20of\x20completed\x20GC\x20cycles\x
+SF:20forced\x20by\x20the\x20application\.\n#\x20TYPE\x20go_gc_cycles_force
+SF:d_gc_cycles_total\x20counter\ngo_gc_cycles_forced_gc_cycles_total\x200\
+SF:n#\x20HELP\x20go_gc_cycles_total_gc_cycles_total\x20Count\x20of\x20all\
+SF:x20completed\x20GC\x20cycles\.\n#\x20TYPE\x20go_gc_cycles_total_gc_cycl
+SF:es_total\x20counter\ngo_gc_cycles_total_gc_cycles_total\x205\n#\x20HELP
+SF:\x20go_gc_duration_seconds\x20A\x20summary\x20of\x20the\x20pause\x20dur
+SF:ation\x20of\x20garbage\x20collection\x20cycles\.\n#\x20TYPE\x20go_gc_du
+SF:ration_seconds\x20summary\ngo_gc_duration_seconds{quantile=\"0\"}\x202\
+SF:.9496e-05\ngo_gc_duration_seconds{quantile=\"0\.25\"}\x205\.4552e-05\ng
+SF:o_gc_dur");
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+```
+
+
+
+// PWNED
+
+---
