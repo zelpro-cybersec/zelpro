@@ -155,7 +155,7 @@ Vemos que podemos añadir una **Nueva tarea**:
 
 Crearemos una nueva tarea con el nombre que queramos, y seleccionamos **Crear un proyecto de estilo libre**. Esto nos dejará ejecutar un comando de Windows, vamos a generar una [reverse shell](https://www.revshells.com/) de tipo `PowerShell #3 (Base64)`:
 
-![Inyectamos una reverse shell](image.png)
+![Inyectamos una reverse shell](./3.png)
 
 Una vez hecho esto, ejecutaremos la tarea y recibiremos la shell:
 
